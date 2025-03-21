@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Monitoring API Churn</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h2>Monitoring temps réel API Churn</h2>
+
+    <div style="width: 70%; margin-bottom: 50px;">
+        <canvas id="apiCallsChart"></canvas>
+    </div>
+
+    <div style="width: 50%;">
+        <canvas id="predictionChart"></canvas>
+    </div>
+
+<script>
+const ctxCalls = document.getElementById('apiCallsChart').getContext('2d');
+const ctxPred = document.getElementById('predictionChart').getContext('2d');
+
+// Graphique du nombre d'appels API en fonction du temps
+const apiCallsChart = new Chart(ctxCalls, {
+    type: 'line',
+    data: {
+        labels: [],
+        datasets: [{
+            label: 'Nombre appels API',
+            borderColor: '#36a2eb',
+            data: [],
+            tension: 0.2,
+            fill: false
+        }]
+    },
+    options: {scales: {y: {beginAtZero: true}}}
+});
+
+// Graphique barres des prédictions churn / no churn
+const predictionChart = new Chart(ctxPred, {
+    type: 'bar',
+    data: {
+        labels: ['Churn', 'No Churn'],
+        datasets: [{
+            label: 'Répartition des prédictions',
+            backgroundColor: ['#ff6384', '#4bc0c0'],
+            data: [0, 0]
+        }]
+    },
+    options: {scales: {y: {beginAtZero: true}}}
+});
+
+// Mise à jour dynamique des graphiques depuis /metrics
+async function updateMetrics() {
+    const response = await fetch('/metrics');
+    const data = await response.text();
+
+    const apiCallsMatch = data.match(/api_calls_total (\d+)/);
+    const churnMatch = data.match(/predictions_total\{type="churn"\} (\d+)/);
+    const noChurnMatch = data.match(/predictions_total\{type="no_churn"\} (\d+)/);
+
+    const totalApiCalls = apiCallsMatch ? parseInt(apiCallsMatch[1]) : 0;
+    const churnCount = churnMatch ? parseInt(churnMatch[1]) : 0;
+    const noChurnCount = noChurnMatch ? parseInt(noChurnMatch[1]) : 0;
+
+    // Mise à jour graphique appels API (ajout heure actuelle)
+    const now = new Date().toLocaleTimeString();
+    apiCallsChart.data.labels.push(now);
+    apiCallsChart.data.datasets[0].data.push(totalApiCalls);
+    if (apiCallsChart.data.labels.length > 20) { // garder les 20 derniers points
+        apiCallsChart.data.labels.shift();
+        apiCallsChart.data.datasets[0].data.shift();
+    }
+    apiCallsChart.update();
+
+    // Mise à jour graphique prédictions churn/no churn
+    predictionChart.data.datasets[0].data = [churnCount, noChurnCount];
+    predictionChart.update();
+}
+
+// Actualisation toutes les 5 secondes
+setInterval(updateMetrics, 5000);
+updateMetrics();
+
+</script>
+
+</body>
+</html>
